@@ -12,23 +12,29 @@
 		"sources": ""
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/template-mod/icon.png",
+	"icon": "assets/joinmessages-mod/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.TemplateMod"
+			"com.example.JoinMessagesMod"
 		],
 		"client": [
-			"com.example.TemplateModClient"
+			"com.example.JoinMessagesModClient"
+		],
+		"modmenu": [
+			"com.example.JoinMessagesModMenu"
 		]
 	},
 	"mixins": [
-		"template-mod.mixins.json"
+		"joinmessages-mod.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.18.4",
 		"minecraft": "~1.21.11",
 		"java": ">=21",
 		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
 	}
 }
