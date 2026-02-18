@@ -8,8 +8,7 @@
 		"Hudson"
 	],
 	"contact": {
-		"homepage": "",
-		"sources": ""
+		"sources": "https://github.com/hudsonhds/joinmessages-1.21.11"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/joinmessages-mod/icon.png",
@@ -30,7 +29,7 @@
 	],
 	"depends": {
 		"fabricloader": ">=0.18.4",
-		"minecraft": "~1.21.11",
+		"minecraft": ">=1.21 <1.22",
 		"java": ">=21",
 		"fabric-api": "*"
 	},

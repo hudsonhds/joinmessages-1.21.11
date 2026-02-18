@@ -19,11 +19,13 @@ public final class JoinMessagesConfig {
 
 	private boolean enabled;
 	private boolean showPrefix;
+	private boolean suppressIfServerMessage;
 	private MessageColor messageColor;
 
-	private JoinMessagesConfig(boolean enabled, boolean showPrefix, MessageColor messageColor) {
+	private JoinMessagesConfig(boolean enabled, boolean showPrefix, boolean suppressIfServerMessage, MessageColor messageColor) {
 		this.enabled = enabled;
 		this.showPrefix = showPrefix;
+		this.suppressIfServerMessage = suppressIfServerMessage;
 		this.messageColor = messageColor;
 	}
 
@@ -47,7 +49,7 @@ public final class JoinMessagesConfig {
 			}
 
 			MessageColor color = MessageColor.fromName(data.messageColor);
-			return new JoinMessagesConfig(data.enabled, data.showPrefix, color);
+			return new JoinMessagesConfig(data.enabled, data.showPrefix, data.suppressIfServerMessage, color);
 		} catch (IOException | JsonParseException e) {
 			JoinMessagesMod.LOGGER.warn("Failed to read config at {}. Using defaults.", CONFIG_PATH, e);
 			return defaults();
@@ -60,6 +62,7 @@ public final class JoinMessagesConfig {
 			SerializedConfig data = new SerializedConfig();
 			data.enabled = this.enabled;
 			data.showPrefix = this.showPrefix;
+			data.suppressIfServerMessage = this.suppressIfServerMessage;
 			data.messageColor = this.messageColor.name();
 
 			try (Writer writer = Files.newBufferedWriter(CONFIG_PATH)) {
@@ -94,8 +97,16 @@ public final class JoinMessagesConfig {
 		this.showPrefix = showPrefix;
 	}
 
+	public boolean suppressIfServerMessage() {
+		return suppressIfServerMessage;
+	}
+
+	public void setSuppressIfServerMessage(boolean suppressIfServerMessage) {
+		this.suppressIfServerMessage = suppressIfServerMessage;
+	}
+
 	public static JoinMessagesConfig defaults() {
-		return new JoinMessagesConfig(true, true, MessageColor.YELLOW);
+		return new JoinMessagesConfig(true, true, true, MessageColor.YELLOW);
 	}
 
 	public enum MessageColor {
@@ -139,6 +150,7 @@ public final class JoinMessagesConfig {
 	private static final class SerializedConfig {
 		boolean enabled = true;
 		boolean showPrefix = true;
+		boolean suppressIfServerMessage = true;
 		String messageColor = MessageColor.YELLOW.name();
 	}
 }

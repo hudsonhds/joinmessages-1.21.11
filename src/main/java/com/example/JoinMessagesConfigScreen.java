@@ -12,6 +12,7 @@ public class JoinMessagesConfigScreen extends Screen {
 
 	private Button enabledButton;
 	private Button prefixButton;
+	private Button suppressButton;
 	private Button colorButton;
 
 	public JoinMessagesConfigScreen(Screen parent, JoinMessagesConfig config) {
@@ -23,7 +24,7 @@ public class JoinMessagesConfigScreen extends Screen {
 	@Override
 	protected void init() {
 		int centerX = this.width / 2;
-		int startY = this.height / 2 - 48;
+		int startY = this.height / 4 + 24;
 
 		this.enabledButton = Button.builder(Component.empty(), button -> {
 			config.setEnabled(!config.enabled());
@@ -39,10 +40,17 @@ public class JoinMessagesConfigScreen extends Screen {
 		this.addRenderableWidget(this.prefixButton);
 		updatePrefixButtonText();
 
+		this.suppressButton = Button.builder(Component.empty(), button -> {
+			config.setSuppressIfServerMessage(!config.suppressIfServerMessage());
+			updateSuppressButtonText();
+		}).bounds(centerX - 100, startY + 48, 200, 20).build();
+		this.addRenderableWidget(this.suppressButton);
+		updateSuppressButtonText();
+
 		this.colorButton = Button.builder(Component.empty(), button -> {
 			config.setMessageColor(nextColor(config.messageColor()));
 			updateColorButtonText();
-		}).bounds(centerX - 100, startY + 48, 200, 20).build();
+		}).bounds(centerX - 100, startY + 72, 200, 20).build();
 		this.addRenderableWidget(this.colorButton);
 		updateColorButtonText();
 
@@ -57,20 +65,18 @@ public class JoinMessagesConfigScreen extends Screen {
 				);
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX - 100, startY + 80, 97, 20).build());
+		}).bounds(centerX - 100, startY + 104, 97, 20).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> {
 			if (this.minecraft != null) {
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX + 3, startY + 80, 97, 20).build());
+		}).bounds(centerX + 3, startY + 104, 97, 20).build());
 	}
 
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		super.render(graphics, mouseX, mouseY, delta);
-
-		graphics.drawCenteredString(this.font, this.title, this.width / 2, this.height / 2 - 46, 0xFFFFFF);
 	}
 
 	@Override
@@ -86,6 +92,10 @@ public class JoinMessagesConfigScreen extends Screen {
 
 	private void updatePrefixButtonText() {
 		this.prefixButton.setMessage(Component.literal("Show [JoinMessages] prefix: " + (config.showPrefix() ? "ON" : "OFF")));
+	}
+
+	private void updateSuppressButtonText() {
+		this.suppressButton.setMessage(Component.literal("Suppress if server sent join/leave: " + (config.suppressIfServerMessage() ? "ON" : "OFF")));
 	}
 
 	private void updateColorButtonText() {
