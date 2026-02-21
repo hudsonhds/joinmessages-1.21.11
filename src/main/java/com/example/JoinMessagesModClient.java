@@ -12,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.GameType;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 	private final Set<String> knownPlayers = new HashSet<>();
 	private final Map<String, Long> recentServerJoinAnnouncements = new HashMap<>();
 	private final Map<String, Long> recentServerLeaveAnnouncements = new HashMap<>();
+	private final Map<String, GameType> knownPlayerGameModes = new HashMap<>();
 	private final Map<String, PendingEvent> pendingJoinMessages = new HashMap<>();
 	private final Map<String, PendingEvent> pendingLeaveMessages = new HashMap<>();
 	private int pendingServerJoinSignals = 0;
@@ -74,6 +76,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			knownPlayers.clear();
 			recentServerJoinAnnouncements.clear();
 			recentServerLeaveAnnouncements.clear();
+			knownPlayerGameModes.clear();
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
 			pendingServerJoinSignals = 0;
@@ -85,6 +88,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			knownPlayers.clear();
 			recentServerJoinAnnouncements.clear();
 			recentServerLeaveAnnouncements.clear();
+			knownPlayerGameModes.clear();
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
 			pendingServerJoinSignals = 0;
@@ -114,16 +118,20 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		flushPendingMessages(client);
 
 		Set<String> currentPlayers = new HashSet<>();
+		Map<String, GameType> currentPlayerGameModes = new HashMap<>();
 		for (PlayerInfo entry : client.getConnection().getListedOnlinePlayers()) {
 			String profileName = getProfileName(entry);
 			if (profileName != null && !profileName.isBlank()) {
 				currentPlayers.add(profileName);
+				currentPlayerGameModes.put(normalizePlayerName(profileName), entry.getGameMode());
 			}
 		}
 
 		if (!seededForCurrentServer) {
 			knownPlayers.clear();
 			knownPlayers.addAll(currentPlayers);
+			knownPlayerGameModes.clear();
+			knownPlayerGameModes.putAll(currentPlayerGameModes);
 			seededForCurrentServer = true;
 			return;
 		}
@@ -142,6 +150,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			for (String left : leftPlayers) {
 				handlePlayerEvent(client, left, false);
 			}
+			handleGameModeChanges(client, currentPlayers, currentPlayerGameModes);
 		} else {
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
@@ -151,6 +160,8 @@ public class JoinMessagesModClient implements ClientModInitializer {
 
 		knownPlayers.clear();
 		knownPlayers.addAll(currentPlayers);
+		knownPlayerGameModes.clear();
+		knownPlayerGameModes.putAll(currentPlayerGameModes);
 	}
 
 	private void sendModMessage(Minecraft client, String message) {
@@ -171,6 +182,36 @@ public class JoinMessagesModClient implements ClientModInitializer {
 
 		Map<String, PendingEvent> pending = joining ? pendingJoinMessages : pendingLeaveMessages;
 		pending.put(normalizePlayerName(playerName), new PendingEvent(playerName, System.currentTimeMillis()));
+	}
+
+	private void handleGameModeChanges(Minecraft client, Set<String> currentPlayers, Map<String, GameType> currentPlayerGameModes) {
+		JoinMessagesConfig.GameModeMessagesMode mode = config.gameModeMessagesMode();
+		if (mode == JoinMessagesConfig.GameModeMessagesMode.OFF) {
+			return;
+		}
+		String localPlayerName = normalizePlayerName(client.player.getGameProfile().name());
+
+		for (String playerName : currentPlayers) {
+			String normalized = normalizePlayerName(playerName);
+			if (normalized.equals(localPlayerName)) {
+				continue;
+			}
+			GameType previousMode = knownPlayerGameModes.get(normalized);
+			GameType currentMode = currentPlayerGameModes.get(normalized);
+
+			if (previousMode == null || currentMode == null || previousMode == currentMode) {
+				continue;
+			}
+
+			if (mode == JoinMessagesConfig.GameModeMessagesMode.SPECTATOR_ONLY && currentMode != GameType.SPECTATOR) {
+				continue;
+			}
+
+			sendModMessage(
+				client,
+				playerName + " changed gamemode: " + formatGameTypeName(previousMode) + " -> " + formatGameTypeName(currentMode)
+			);
+		}
 	}
 
 	private void flushPendingMessages(Minecraft client) {
@@ -287,6 +328,14 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			|| content.contains(" left the server")
 			|| content.contains(" disconnected")
 			|| content.contains(" quit");
+	}
+
+	private static String formatGameTypeName(GameType gameType) {
+		String name = gameType.getName();
+		if (name == null || name.isBlank()) {
+			return "Unknown";
+		}
+		return Character.toUpperCase(name.charAt(0)) + name.substring(1);
 	}
 
 	private record PendingEvent(String playerName, long detectedAtMillis) {

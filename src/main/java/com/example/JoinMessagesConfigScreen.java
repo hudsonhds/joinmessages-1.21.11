@@ -14,6 +14,7 @@ public class JoinMessagesConfigScreen extends Screen {
 	private Button prefixButton;
 	private Button suppressButton;
 	private Button colorButton;
+	private Button gamemodeMessagesButton;
 
 	public JoinMessagesConfigScreen(Screen parent, JoinMessagesConfig config) {
 		super(Component.literal("Join Messages Config"));
@@ -54,6 +55,13 @@ public class JoinMessagesConfigScreen extends Screen {
 		this.addRenderableWidget(this.colorButton);
 		updateColorButtonText();
 
+		this.gamemodeMessagesButton = Button.builder(Component.empty(), button -> {
+			config.setGameModeMessagesMode(config.gameModeMessagesMode().next());
+			updateGamemodeMessagesButtonText();
+		}).bounds(centerX - 100, startY + 96, 200, 20).build();
+		this.addRenderableWidget(this.gamemodeMessagesButton);
+		updateGamemodeMessagesButtonText();
+
 		this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
 			config.save();
 			if (this.minecraft != null) {
@@ -65,13 +73,13 @@ public class JoinMessagesConfigScreen extends Screen {
 				);
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX - 100, startY + 104, 97, 20).build());
+		}).bounds(centerX - 100, startY + 128, 97, 20).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> {
 			if (this.minecraft != null) {
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX + 3, startY + 104, 97, 20).build());
+		}).bounds(centerX + 3, startY + 128, 97, 20).build());
 	}
 
 	@Override
@@ -100,6 +108,10 @@ public class JoinMessagesConfigScreen extends Screen {
 
 	private void updateColorButtonText() {
 		this.colorButton.setMessage(Component.literal("Message color: " + config.messageColor().label()));
+	}
+
+	private void updateGamemodeMessagesButtonText() {
+		this.gamemodeMessagesButton.setMessage(Component.literal("Gamemode messages: " + config.gameModeMessagesMode().label()));
 	}
 
 	private static JoinMessagesConfig.MessageColor nextColor(JoinMessagesConfig.MessageColor current) {

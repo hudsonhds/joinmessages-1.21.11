@@ -21,12 +21,20 @@ public final class JoinMessagesConfig {
 	private boolean showPrefix;
 	private boolean suppressIfServerMessage;
 	private MessageColor messageColor;
+	private GameModeMessagesMode gameModeMessagesMode;
 
-	private JoinMessagesConfig(boolean enabled, boolean showPrefix, boolean suppressIfServerMessage, MessageColor messageColor) {
+	private JoinMessagesConfig(
+		boolean enabled,
+		boolean showPrefix,
+		boolean suppressIfServerMessage,
+		MessageColor messageColor,
+		GameModeMessagesMode gameModeMessagesMode
+	) {
 		this.enabled = enabled;
 		this.showPrefix = showPrefix;
 		this.suppressIfServerMessage = suppressIfServerMessage;
 		this.messageColor = messageColor;
+		this.gameModeMessagesMode = gameModeMessagesMode;
 	}
 
 	public static JoinMessagesConfig getInstance() {
@@ -49,7 +57,8 @@ public final class JoinMessagesConfig {
 			}
 
 			MessageColor color = MessageColor.fromName(data.messageColor);
-			return new JoinMessagesConfig(data.enabled, data.showPrefix, data.suppressIfServerMessage, color);
+			GameModeMessagesMode gameModeMode = GameModeMessagesMode.fromName(data.gameModeMessagesMode);
+			return new JoinMessagesConfig(data.enabled, data.showPrefix, data.suppressIfServerMessage, color, gameModeMode);
 		} catch (IOException | JsonParseException e) {
 			JoinMessagesMod.LOGGER.warn("Failed to read config at {}. Using defaults.", CONFIG_PATH, e);
 			return defaults();
@@ -64,6 +73,7 @@ public final class JoinMessagesConfig {
 			data.showPrefix = this.showPrefix;
 			data.suppressIfServerMessage = this.suppressIfServerMessage;
 			data.messageColor = this.messageColor.name();
+			data.gameModeMessagesMode = this.gameModeMessagesMode.name();
 
 			try (Writer writer = Files.newBufferedWriter(CONFIG_PATH)) {
 				GSON.toJson(data, writer);
@@ -78,7 +88,11 @@ public final class JoinMessagesConfig {
 	}
 
 	public void setMessageColor(MessageColor messageColor) {
+		if (this.messageColor == messageColor) {
+			return;
+		}
 		this.messageColor = messageColor;
+		save();
 	}
 
 	public boolean enabled() {
@@ -86,7 +100,11 @@ public final class JoinMessagesConfig {
 	}
 
 	public void setEnabled(boolean enabled) {
+		if (this.enabled == enabled) {
+			return;
+		}
 		this.enabled = enabled;
+		save();
 	}
 
 	public boolean showPrefix() {
@@ -94,7 +112,11 @@ public final class JoinMessagesConfig {
 	}
 
 	public void setShowPrefix(boolean showPrefix) {
+		if (this.showPrefix == showPrefix) {
+			return;
+		}
 		this.showPrefix = showPrefix;
+		save();
 	}
 
 	public boolean suppressIfServerMessage() {
@@ -102,11 +124,27 @@ public final class JoinMessagesConfig {
 	}
 
 	public void setSuppressIfServerMessage(boolean suppressIfServerMessage) {
+		if (this.suppressIfServerMessage == suppressIfServerMessage) {
+			return;
+		}
 		this.suppressIfServerMessage = suppressIfServerMessage;
+		save();
+	}
+
+	public GameModeMessagesMode gameModeMessagesMode() {
+		return gameModeMessagesMode;
+	}
+
+	public void setGameModeMessagesMode(GameModeMessagesMode gameModeMessagesMode) {
+		if (this.gameModeMessagesMode == gameModeMessagesMode) {
+			return;
+		}
+		this.gameModeMessagesMode = gameModeMessagesMode;
+		save();
 	}
 
 	public static JoinMessagesConfig defaults() {
-		return new JoinMessagesConfig(true, true, true, MessageColor.YELLOW);
+		return new JoinMessagesConfig(true, true, true, MessageColor.YELLOW, GameModeMessagesMode.OFF);
 	}
 
 	public enum MessageColor {
@@ -147,10 +185,45 @@ public final class JoinMessagesConfig {
 		}
 	}
 
+	public enum GameModeMessagesMode {
+		OFF("Off"),
+		SPECTATOR_ONLY("Only Spectator Messages"),
+		ALL("All Gamemode Messages");
+
+		private final String label;
+
+		GameModeMessagesMode(String label) {
+			this.label = label;
+		}
+
+		public String label() {
+			return label;
+		}
+
+		public GameModeMessagesMode next() {
+			GameModeMessagesMode[] values = values();
+			int nextIndex = (this.ordinal() + 1) % values.length;
+			return values[nextIndex];
+		}
+
+		public static GameModeMessagesMode fromName(String name) {
+			if (name == null || name.isBlank()) {
+				return OFF;
+			}
+			for (GameModeMessagesMode mode : values()) {
+				if (mode.name().equalsIgnoreCase(name)) {
+					return mode;
+				}
+			}
+			return OFF;
+		}
+	}
+
 	private static final class SerializedConfig {
 		boolean enabled = true;
 		boolean showPrefix = true;
 		boolean suppressIfServerMessage = true;
 		String messageColor = MessageColor.YELLOW.name();
+		String gameModeMessagesMode = GameModeMessagesMode.OFF.name();
 	}
 }

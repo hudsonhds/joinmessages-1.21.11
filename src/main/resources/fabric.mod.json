@@ -8,11 +8,12 @@
 		"Hudson"
 	],
 	"contact": {
+		"homepage": "https://modrinth.com/mod/joinleave-messages",
 		"sources": "https://github.com/hudsonhds/joinmessages-1.21.11"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/joinmessages-mod/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"main": [
 			"com.example.JoinMessagesMod"
@@ -35,5 +36,13 @@
 	},
 	"suggests": {
 		"modmenu": "*"
+	},
+	"custom": {
+		"modmenu": {
+			"links": {
+				"modmenu.modrinth": "https://modrinth.com/mod/joinleave-messages"
+			},
+			"update_checker": true
+		}
 	}
 }
