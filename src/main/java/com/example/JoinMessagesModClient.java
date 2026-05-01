@@ -4,7 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
@@ -32,7 +32,9 @@ public class JoinMessagesModClient implements ClientModInitializer {
 	private static final Logger LOGGER = LoggerFactory.getLogger(JoinMessagesMod.MOD_ID + "-client");
 	private static final Pattern JOIN_PATTERN = Pattern.compile("\\b([A-Za-z0-9_]{3,16})\\b\\s+(joined|connected)\\b", Pattern.CASE_INSENSITIVE);
 	private static final Pattern LEAVE_PATTERN = Pattern.compile("\\b([A-Za-z0-9_]{3,16})\\b\\s+(left|quit|disconnected)\\b", Pattern.CASE_INSENSITIVE);
+	private static final Pattern SERVER_WELCOME_PATTERN = Pattern.compile("^Welcome\\s+([A-Za-z0-9_]{3,16})\\s+to\\s+the\\s+server!$");
 	private static final long SERVER_ANNOUNCEMENT_WINDOW_MS = 5000L;
+	private static final long AUTO_WELCOME_DEDUP_WINDOW_MS = 3000L;
 	private static final long PENDING_MESSAGE_DELAY_MS = 1200L;
 	private static final KeyMapping.Category KEY_CATEGORY = KeyMapping.Category.register(
 		Identifier.parse(JoinMessagesMod.MOD_ID + ":general")
@@ -44,6 +46,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 	private final Map<String, GameType> knownPlayerGameModes = new HashMap<>();
 	private final Map<String, PendingEvent> pendingJoinMessages = new HashMap<>();
 	private final Map<String, PendingEvent> pendingLeaveMessages = new HashMap<>();
+	private final Map<String, Long> recentAutoWelcomeTriggers = new HashMap<>();
 	private int pendingServerJoinSignals = 0;
 	private int pendingServerLeaveSignals = 0;
 	private final JoinMessagesConfig config = JoinMessagesConfig.getInstance();
@@ -65,7 +68,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		}
 		LOGGER.info("Loaded {} client v{} from {}", JoinMessagesMod.MOD_ID, version, codeSource);
 
-		this.openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+		this.openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
 			"key.joinmessages-mod.open_config",
 			InputConstants.Type.KEYSYM,
 			GLFW.GLFW_KEY_J,
@@ -79,6 +82,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			knownPlayerGameModes.clear();
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
+			recentAutoWelcomeTriggers.clear();
 			pendingServerJoinSignals = 0;
 			pendingServerLeaveSignals = 0;
 			seededForCurrentServer = false;
@@ -91,6 +95,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			knownPlayerGameModes.clear();
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
+			recentAutoWelcomeTriggers.clear();
 			pendingServerJoinSignals = 0;
 			pendingServerLeaveSignals = 0;
 			seededForCurrentServer = false;
@@ -98,9 +103,11 @@ public class JoinMessagesModClient implements ClientModInitializer {
 
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			recordServerJoinLeaveAnnouncement(message);
+			maybeSendAutoWelcomeReply(Minecraft.getInstance(), message);
 		});
 		ClientReceiveMessageEvents.CHAT.register((message, signedMessage, sender, params, receptionTimestamp) -> {
 			recordServerJoinLeaveAnnouncement(message);
+			maybeSendAutoWelcomeReply(Minecraft.getInstance(), message);
 		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
@@ -115,6 +122,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			return;
 		}
 		pruneOldAnnouncements();
+		pruneOldAutoWelcomeTriggers();
 		flushPendingMessages(client);
 
 		Set<String> currentPlayers = new HashSet<>();
@@ -167,7 +175,7 @@ public class JoinMessagesModClient implements ClientModInitializer {
 	private void sendModMessage(Minecraft client, String message) {
 		String prefix = config.showPrefix() ? "[JoinMessages] " : "";
 		Component text = Component.literal(prefix + message).withStyle(config.messageColor().formatting());
-		client.player.displayClientMessage(text, false);
+		client.player.sendSystemMessage(text);
 	}
 
 	private void handlePlayerEvent(Minecraft client, String playerName, boolean joining) {
@@ -307,10 +315,86 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		pendingServerLeaveSignals += leaveMatches;
 	}
 
+	private void maybeSendAutoWelcomeReply(Minecraft client, Component message) {
+		if (client == null || client.player == null || client.getConnection() == null) {
+			return;
+		}
+		if (!config.autoWelcomeEnabled()) {
+			return;
+		}
+
+		String content = message.getString();
+		if (content == null) {
+			return;
+		}
+
+		Matcher matcher = SERVER_WELCOME_PATTERN.matcher(content.trim());
+		if (!matcher.matches()) {
+			return;
+		}
+
+		String playerName = matcher.group(1);
+		if (playerName.equalsIgnoreCase(client.player.getGameProfile().name())) {
+			return;
+		}
+		if (wasRecentlyAutoWelcomed(playerName)) {
+			return;
+		}
+
+		String outgoingMessage = config.autoWelcomeMessage().replace("{player}", playerName);
+		if (outgoingMessage.isBlank()) {
+			return;
+		}
+
+		if (sendChatMessage(client, outgoingMessage)) {
+			recentAutoWelcomeTriggers.put(normalizePlayerName(playerName), System.currentTimeMillis());
+		}
+	}
+
+	private boolean sendChatMessage(Minecraft client, String message) {
+		Object connection = client.getConnection();
+		if (connection == null) {
+			return false;
+		}
+
+		try {
+			Method sendChat = connection.getClass().getMethod("sendChat", String.class);
+			sendChat.invoke(connection, message);
+			return true;
+		} catch (NoSuchMethodException ignored) {
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			LOGGER.warn("Failed to send auto-welcome chat via sendChat()", e);
+			return false;
+		}
+
+		try {
+			Method sendChatMessage = connection.getClass().getMethod("sendChatMessage", String.class);
+			sendChatMessage.invoke(connection, message);
+			return true;
+		} catch (NoSuchMethodException ignored) {
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			LOGGER.warn("Failed to send auto-welcome chat via sendChatMessage()", e);
+			return false;
+		}
+
+		LOGGER.warn("Failed to send auto-welcome chat: no compatible send chat method found.");
+		return false;
+	}
+
+	private boolean wasRecentlyAutoWelcomed(String playerName) {
+		Long when = recentAutoWelcomeTriggers.get(normalizePlayerName(playerName));
+		return when != null && (System.currentTimeMillis() - when) <= AUTO_WELCOME_DEDUP_WINDOW_MS;
+	}
+
 	private void pruneOldAnnouncements() {
 		long threshold = System.currentTimeMillis() - SERVER_ANNOUNCEMENT_WINDOW_MS;
 		recentServerJoinAnnouncements.entrySet().removeIf(entry -> entry.getValue() < threshold);
 		recentServerLeaveAnnouncements.entrySet().removeIf(entry -> entry.getValue() < threshold);
+	}
+
+	private void pruneOldAutoWelcomeTriggers() {
+		long threshold = System.currentTimeMillis() - AUTO_WELCOME_DEDUP_WINDOW_MS;
+		recentAutoWelcomeTriggers.entrySet().removeIf(entry -> entry.getValue() < threshold);
 	}
 
 	private static String normalizePlayerName(String name) {

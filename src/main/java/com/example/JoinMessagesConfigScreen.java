@@ -1,7 +1,7 @@
 package com.example;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
@@ -15,6 +15,8 @@ public class JoinMessagesConfigScreen extends Screen {
 	private Button suppressButton;
 	private Button colorButton;
 	private Button gamemodeMessagesButton;
+	private Button autoWelcomeEnabledButton;
+	private EditBox autoWelcomeMessageField;
 
 	public JoinMessagesConfigScreen(Screen parent, JoinMessagesConfig config) {
 		super(Component.literal("Join Messages Config"));
@@ -62,6 +64,19 @@ public class JoinMessagesConfigScreen extends Screen {
 		this.addRenderableWidget(this.gamemodeMessagesButton);
 		updateGamemodeMessagesButtonText();
 
+		this.autoWelcomeEnabledButton = Button.builder(Component.empty(), button -> {
+			config.setAutoWelcomeEnabled(!config.autoWelcomeEnabled());
+			updateAutoWelcomeEnabledButtonText();
+		}).bounds(centerX - 100, startY + 120, 200, 20).build();
+		this.addRenderableWidget(this.autoWelcomeEnabledButton);
+		updateAutoWelcomeEnabledButtonText();
+
+		this.autoWelcomeMessageField = new EditBox(this.font, centerX - 100, startY + 144, 200, 20, Component.literal("Auto welcome message"));
+		this.autoWelcomeMessageField.setMaxLength(256);
+		this.autoWelcomeMessageField.setValue(config.autoWelcomeMessage());
+		this.autoWelcomeMessageField.setResponder(config::setAutoWelcomeMessage);
+		this.addRenderableWidget(this.autoWelcomeMessageField);
+
 		this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
 			config.save();
 			if (this.minecraft != null) {
@@ -73,18 +88,13 @@ public class JoinMessagesConfigScreen extends Screen {
 				);
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX - 100, startY + 128, 97, 20).build());
+		}).bounds(centerX - 100, startY + 176, 97, 20).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> {
 			if (this.minecraft != null) {
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX + 3, startY + 128, 97, 20).build());
-	}
-
-	@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		super.render(graphics, mouseX, mouseY, delta);
+		}).bounds(centerX + 3, startY + 176, 97, 20).build());
 	}
 
 	@Override
@@ -112,6 +122,10 @@ public class JoinMessagesConfigScreen extends Screen {
 
 	private void updateGamemodeMessagesButtonText() {
 		this.gamemodeMessagesButton.setMessage(Component.literal("Gamemode messages: " + config.gameModeMessagesMode().label()));
+	}
+
+	private void updateAutoWelcomeEnabledButtonText() {
+		this.autoWelcomeEnabledButton.setMessage(Component.literal("Auto-welcome new players: " + (config.autoWelcomeEnabled() ? "ON" : "OFF")));
 	}
 
 	private static JoinMessagesConfig.MessageColor nextColor(JoinMessagesConfig.MessageColor current) {

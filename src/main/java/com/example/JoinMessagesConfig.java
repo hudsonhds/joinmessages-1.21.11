@@ -20,6 +20,8 @@ public final class JoinMessagesConfig {
 	private boolean enabled;
 	private boolean showPrefix;
 	private boolean suppressIfServerMessage;
+	private boolean autoWelcomeEnabled;
+	private String autoWelcomeMessage;
 	private MessageColor messageColor;
 	private GameModeMessagesMode gameModeMessagesMode;
 
@@ -27,12 +29,16 @@ public final class JoinMessagesConfig {
 		boolean enabled,
 		boolean showPrefix,
 		boolean suppressIfServerMessage,
+		boolean autoWelcomeEnabled,
+		String autoWelcomeMessage,
 		MessageColor messageColor,
 		GameModeMessagesMode gameModeMessagesMode
 	) {
 		this.enabled = enabled;
 		this.showPrefix = showPrefix;
 		this.suppressIfServerMessage = suppressIfServerMessage;
+		this.autoWelcomeEnabled = autoWelcomeEnabled;
+		this.autoWelcomeMessage = autoWelcomeMessage;
 		this.messageColor = messageColor;
 		this.gameModeMessagesMode = gameModeMessagesMode;
 	}
@@ -58,7 +64,16 @@ public final class JoinMessagesConfig {
 
 			MessageColor color = MessageColor.fromName(data.messageColor);
 			GameModeMessagesMode gameModeMode = GameModeMessagesMode.fromName(data.gameModeMessagesMode);
-			return new JoinMessagesConfig(data.enabled, data.showPrefix, data.suppressIfServerMessage, color, gameModeMode);
+			String autoWelcomeMessage = sanitizeAutoWelcomeMessage(data.autoWelcomeMessage);
+			return new JoinMessagesConfig(
+				data.enabled,
+				data.showPrefix,
+				data.suppressIfServerMessage,
+				data.autoWelcomeEnabled,
+				autoWelcomeMessage,
+				color,
+				gameModeMode
+			);
 		} catch (IOException | JsonParseException e) {
 			JoinMessagesMod.LOGGER.warn("Failed to read config at {}. Using defaults.", CONFIG_PATH, e);
 			return defaults();
@@ -72,6 +87,8 @@ public final class JoinMessagesConfig {
 			data.enabled = this.enabled;
 			data.showPrefix = this.showPrefix;
 			data.suppressIfServerMessage = this.suppressIfServerMessage;
+			data.autoWelcomeEnabled = this.autoWelcomeEnabled;
+			data.autoWelcomeMessage = sanitizeAutoWelcomeMessage(this.autoWelcomeMessage);
 			data.messageColor = this.messageColor.name();
 			data.gameModeMessagesMode = this.gameModeMessagesMode.name();
 
@@ -143,8 +160,40 @@ public final class JoinMessagesConfig {
 		save();
 	}
 
+	public boolean autoWelcomeEnabled() {
+		return autoWelcomeEnabled;
+	}
+
+	public void setAutoWelcomeEnabled(boolean autoWelcomeEnabled) {
+		if (this.autoWelcomeEnabled == autoWelcomeEnabled) {
+			return;
+		}
+		this.autoWelcomeEnabled = autoWelcomeEnabled;
+		save();
+	}
+
+	public String autoWelcomeMessage() {
+		return sanitizeAutoWelcomeMessage(autoWelcomeMessage);
+	}
+
+	public void setAutoWelcomeMessage(String autoWelcomeMessage) {
+		String sanitized = sanitizeAutoWelcomeMessage(autoWelcomeMessage);
+		if (this.autoWelcomeMessage.equals(sanitized)) {
+			return;
+		}
+		this.autoWelcomeMessage = sanitized;
+		save();
+	}
+
 	public static JoinMessagesConfig defaults() {
-		return new JoinMessagesConfig(true, true, true, MessageColor.YELLOW, GameModeMessagesMode.OFF);
+		return new JoinMessagesConfig(true, true, true, false, "Welcome {player}!", MessageColor.YELLOW, GameModeMessagesMode.OFF);
+	}
+
+	private static String sanitizeAutoWelcomeMessage(String message) {
+		if (message == null || message.isBlank()) {
+			return "Welcome {player}!";
+		}
+		return message.trim();
 	}
 
 	public enum MessageColor {
@@ -223,6 +272,8 @@ public final class JoinMessagesConfig {
 		boolean enabled = true;
 		boolean showPrefix = true;
 		boolean suppressIfServerMessage = true;
+		boolean autoWelcomeEnabled = false;
+		String autoWelcomeMessage = "Welcome {player}!";
 		String messageColor = MessageColor.YELLOW.name();
 		String gameModeMessagesMode = GameModeMessagesMode.OFF.name();
 	}
