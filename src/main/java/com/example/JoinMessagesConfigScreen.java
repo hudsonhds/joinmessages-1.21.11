@@ -15,8 +15,11 @@ public class JoinMessagesConfigScreen extends Screen {
 	private Button suppressButton;
 	private Button colorButton;
 	private Button gamemodeMessagesButton;
+	private Button limitGamemodeTrackingButton;
+	private Button joinGamemodeNotifyButton;
 	private Button autoWelcomeEnabledButton;
 	private EditBox autoWelcomeMessageField;
+	private EditBox gamemodeTrackingMaxPlayersField;
 
 	public JoinMessagesConfigScreen(Screen parent, JoinMessagesConfig config) {
 		super(Component.literal("Join Messages Config"));
@@ -28,54 +31,89 @@ public class JoinMessagesConfigScreen extends Screen {
 	protected void init() {
 		int centerX = this.width / 2;
 		int startY = this.height / 4 + 24;
+		int columnWidth = 200;
+		int columnGap = 12;
+		int rowHeight = 24;
+		int leftX = centerX - columnWidth - (columnGap / 2);
+		int rightX = centerX + (columnGap / 2);
 
 		this.enabledButton = Button.builder(Component.empty(), button -> {
 			config.setEnabled(!config.enabled());
 			updateEnabledButtonText();
-		}).bounds(centerX - 100, startY, 200, 20).build();
+		}).bounds(leftX, startY, columnWidth, 20).build();
 		this.addRenderableWidget(this.enabledButton);
 		updateEnabledButtonText();
 
 		this.prefixButton = Button.builder(Component.empty(), button -> {
 			config.setShowPrefix(!config.showPrefix());
 			updatePrefixButtonText();
-		}).bounds(centerX - 100, startY + 24, 200, 20).build();
+		}).bounds(leftX, startY + rowHeight, columnWidth, 20).build();
 		this.addRenderableWidget(this.prefixButton);
 		updatePrefixButtonText();
 
 		this.suppressButton = Button.builder(Component.empty(), button -> {
 			config.setSuppressIfServerMessage(!config.suppressIfServerMessage());
 			updateSuppressButtonText();
-		}).bounds(centerX - 100, startY + 48, 200, 20).build();
+		}).bounds(leftX, startY + (rowHeight * 2), columnWidth, 20).build();
 		this.addRenderableWidget(this.suppressButton);
 		updateSuppressButtonText();
 
 		this.colorButton = Button.builder(Component.empty(), button -> {
 			config.setMessageColor(nextColor(config.messageColor()));
 			updateColorButtonText();
-		}).bounds(centerX - 100, startY + 72, 200, 20).build();
+		}).bounds(leftX, startY + (rowHeight * 3), columnWidth, 20).build();
 		this.addRenderableWidget(this.colorButton);
 		updateColorButtonText();
 
 		this.gamemodeMessagesButton = Button.builder(Component.empty(), button -> {
 			config.setGameModeMessagesMode(config.gameModeMessagesMode().next());
 			updateGamemodeMessagesButtonText();
-		}).bounds(centerX - 100, startY + 96, 200, 20).build();
+		}).bounds(leftX, startY + (rowHeight * 4), columnWidth, 20).build();
 		this.addRenderableWidget(this.gamemodeMessagesButton);
 		updateGamemodeMessagesButtonText();
+
+		this.limitGamemodeTrackingButton = Button.builder(Component.empty(), button -> {
+			config.setLimitGamemodeTrackingByPlayerCount(!config.limitGamemodeTrackingByPlayerCount());
+			updateLimitGamemodeTrackingButtonText();
+		}).bounds(rightX, startY, columnWidth, 20).build();
+		this.addRenderableWidget(this.limitGamemodeTrackingButton);
+		updateLimitGamemodeTrackingButtonText();
+
+		this.gamemodeTrackingMaxPlayersField = new EditBox(this.font, rightX, startY + rowHeight, columnWidth, 20, Component.literal("Max players for tracking"));
+		this.gamemodeTrackingMaxPlayersField.setMaxLength(3);
+		this.gamemodeTrackingMaxPlayersField.setValue(Integer.toString(config.gamemodeTrackingMaxPlayers()));
+		this.gamemodeTrackingMaxPlayersField.setResponder(value -> {
+			if (value == null || value.isBlank()) {
+				return;
+			}
+			try {
+				config.setGamemodeTrackingMaxPlayers(Integer.parseInt(value.trim()));
+			} catch (NumberFormatException ignored) {
+			}
+		});
+		this.addRenderableWidget(this.gamemodeTrackingMaxPlayersField);
+
+		this.joinGamemodeNotifyButton = Button.builder(Component.empty(), button -> {
+			config.setJoinGamemodeNotifyMode(config.joinGamemodeNotifyMode().next());
+			updateJoinGamemodeNotifyButtonText();
+		}).bounds(rightX, startY + (rowHeight * 2), columnWidth, 20).build();
+		this.addRenderableWidget(this.joinGamemodeNotifyButton);
+		updateJoinGamemodeNotifyButtonText();
 
 		this.autoWelcomeEnabledButton = Button.builder(Component.empty(), button -> {
 			config.setAutoWelcomeEnabled(!config.autoWelcomeEnabled());
 			updateAutoWelcomeEnabledButtonText();
-		}).bounds(centerX - 100, startY + 120, 200, 20).build();
+		}).bounds(rightX, startY + (rowHeight * 3), columnWidth, 20).build();
 		this.addRenderableWidget(this.autoWelcomeEnabledButton);
 		updateAutoWelcomeEnabledButtonText();
 
-		this.autoWelcomeMessageField = new EditBox(this.font, centerX - 100, startY + 144, 200, 20, Component.literal("Auto welcome message"));
+		this.autoWelcomeMessageField = new EditBox(this.font, rightX, startY + (rowHeight * 4), columnWidth, 20, Component.literal("Auto welcome message"));
 		this.autoWelcomeMessageField.setMaxLength(256);
 		this.autoWelcomeMessageField.setValue(config.autoWelcomeMessage());
 		this.autoWelcomeMessageField.setResponder(config::setAutoWelcomeMessage);
 		this.addRenderableWidget(this.autoWelcomeMessageField);
+
+		int bottomRowY = startY + (rowHeight * 6);
 
 		this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
 			config.save();
@@ -88,13 +126,13 @@ public class JoinMessagesConfigScreen extends Screen {
 				);
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX - 100, startY + 176, 97, 20).build());
+		}).bounds(centerX - 100, bottomRowY, 97, 20).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> {
 			if (this.minecraft != null) {
 				this.minecraft.setScreen(parent);
 			}
-		}).bounds(centerX + 3, startY + 176, 97, 20).build());
+		}).bounds(centerX + 3, bottomRowY, 97, 20).build());
 	}
 
 	@Override
@@ -105,27 +143,39 @@ public class JoinMessagesConfigScreen extends Screen {
 	}
 
 	private void updateEnabledButtonText() {
-		this.enabledButton.setMessage(Component.literal("Messages enabled: " + (config.enabled() ? "ON" : "OFF")));
+		this.enabledButton.setMessage(Component.literal(padded("Messages enabled: " + (config.enabled() ? "ON" : "OFF"))));
 	}
 
 	private void updatePrefixButtonText() {
-		this.prefixButton.setMessage(Component.literal("Show [JoinMessages] prefix: " + (config.showPrefix() ? "ON" : "OFF")));
+		this.prefixButton.setMessage(Component.literal(padded("Show [JoinMessages] prefix: " + (config.showPrefix() ? "ON" : "OFF"))));
 	}
 
 	private void updateSuppressButtonText() {
-		this.suppressButton.setMessage(Component.literal("Suppress if server sent join/leave: " + (config.suppressIfServerMessage() ? "ON" : "OFF")));
+		this.suppressButton.setMessage(Component.literal(padded("Suppress if server sent join/leave: " + (config.suppressIfServerMessage() ? "ON" : "OFF"))));
 	}
 
 	private void updateColorButtonText() {
-		this.colorButton.setMessage(Component.literal("Message color: " + config.messageColor().label()));
+		this.colorButton.setMessage(Component.literal(padded("Message color: " + config.messageColor().label())));
 	}
 
 	private void updateGamemodeMessagesButtonText() {
-		this.gamemodeMessagesButton.setMessage(Component.literal("Gamemode messages: " + config.gameModeMessagesMode().label()));
+		this.gamemodeMessagesButton.setMessage(Component.literal(padded("Gamemode messages: " + config.gameModeMessagesMode().label())));
+	}
+
+	private void updateLimitGamemodeTrackingButtonText() {
+		this.limitGamemodeTrackingButton.setMessage(Component.literal(padded("Track gamemodes below player cap: " + (config.limitGamemodeTrackingByPlayerCount() ? "ON" : "OFF"))));
+	}
+
+	private void updateJoinGamemodeNotifyButtonText() {
+		this.joinGamemodeNotifyButton.setMessage(Component.literal(padded("Join notify gamemode: " + config.joinGamemodeNotifyMode().label())));
 	}
 
 	private void updateAutoWelcomeEnabledButtonText() {
-		this.autoWelcomeEnabledButton.setMessage(Component.literal("Auto-welcome new players: " + (config.autoWelcomeEnabled() ? "ON" : "OFF")));
+		this.autoWelcomeEnabledButton.setMessage(Component.literal(padded("Auto-welcome new players: " + (config.autoWelcomeEnabled() ? "ON" : "OFF"))));
+	}
+
+	private static String padded(String text) {
+		return "  " + text + "  ";
 	}
 
 	private static JoinMessagesConfig.MessageColor nextColor(JoinMessagesConfig.MessageColor current) {

@@ -24,6 +24,9 @@ public final class JoinMessagesConfig {
 	private String autoWelcomeMessage;
 	private MessageColor messageColor;
 	private GameModeMessagesMode gameModeMessagesMode;
+	private boolean limitGamemodeTrackingByPlayerCount;
+	private int gamemodeTrackingMaxPlayers;
+	private JoinGamemodeNotifyMode joinGamemodeNotifyMode;
 
 	private JoinMessagesConfig(
 		boolean enabled,
@@ -32,7 +35,10 @@ public final class JoinMessagesConfig {
 		boolean autoWelcomeEnabled,
 		String autoWelcomeMessage,
 		MessageColor messageColor,
-		GameModeMessagesMode gameModeMessagesMode
+		GameModeMessagesMode gameModeMessagesMode,
+		boolean limitGamemodeTrackingByPlayerCount,
+		int gamemodeTrackingMaxPlayers,
+		JoinGamemodeNotifyMode joinGamemodeNotifyMode
 	) {
 		this.enabled = enabled;
 		this.showPrefix = showPrefix;
@@ -41,6 +47,9 @@ public final class JoinMessagesConfig {
 		this.autoWelcomeMessage = autoWelcomeMessage;
 		this.messageColor = messageColor;
 		this.gameModeMessagesMode = gameModeMessagesMode;
+		this.limitGamemodeTrackingByPlayerCount = limitGamemodeTrackingByPlayerCount;
+		this.gamemodeTrackingMaxPlayers = sanitizeMaxPlayers(gamemodeTrackingMaxPlayers);
+		this.joinGamemodeNotifyMode = joinGamemodeNotifyMode;
 	}
 
 	public static JoinMessagesConfig getInstance() {
@@ -72,7 +81,10 @@ public final class JoinMessagesConfig {
 				data.autoWelcomeEnabled,
 				autoWelcomeMessage,
 				color,
-				gameModeMode
+				gameModeMode,
+				data.limitGamemodeTrackingByPlayerCount,
+				sanitizeMaxPlayers(data.gamemodeTrackingMaxPlayers),
+				JoinGamemodeNotifyMode.fromName(data.joinGamemodeNotifyMode)
 			);
 		} catch (IOException | JsonParseException e) {
 			JoinMessagesMod.LOGGER.warn("Failed to read config at {}. Using defaults.", CONFIG_PATH, e);
@@ -91,6 +103,9 @@ public final class JoinMessagesConfig {
 			data.autoWelcomeMessage = sanitizeAutoWelcomeMessage(this.autoWelcomeMessage);
 			data.messageColor = this.messageColor.name();
 			data.gameModeMessagesMode = this.gameModeMessagesMode.name();
+			data.limitGamemodeTrackingByPlayerCount = this.limitGamemodeTrackingByPlayerCount;
+			data.gamemodeTrackingMaxPlayers = sanitizeMaxPlayers(this.gamemodeTrackingMaxPlayers);
+			data.joinGamemodeNotifyMode = this.joinGamemodeNotifyMode.name();
 
 			try (Writer writer = Files.newBufferedWriter(CONFIG_PATH)) {
 				GSON.toJson(data, writer);
@@ -186,7 +201,18 @@ public final class JoinMessagesConfig {
 	}
 
 	public static JoinMessagesConfig defaults() {
-		return new JoinMessagesConfig(true, true, true, false, "Welcome {player}!", MessageColor.YELLOW, GameModeMessagesMode.OFF);
+		return new JoinMessagesConfig(
+			true,
+			true,
+			true,
+			false,
+			"Welcome {player}!",
+			MessageColor.YELLOW,
+			GameModeMessagesMode.OFF,
+			true,
+			40,
+			JoinGamemodeNotifyMode.OFF
+		);
 	}
 
 	private static String sanitizeAutoWelcomeMessage(String message) {
@@ -194,6 +220,47 @@ public final class JoinMessagesConfig {
 			return "Welcome {player}!";
 		}
 		return message.trim();
+	}
+
+	private static int sanitizeMaxPlayers(int value) {
+		return Math.max(2, Math.min(500, value));
+	}
+
+	public boolean limitGamemodeTrackingByPlayerCount() {
+		return limitGamemodeTrackingByPlayerCount;
+	}
+
+	public void setLimitGamemodeTrackingByPlayerCount(boolean limitGamemodeTrackingByPlayerCount) {
+		if (this.limitGamemodeTrackingByPlayerCount == limitGamemodeTrackingByPlayerCount) {
+			return;
+		}
+		this.limitGamemodeTrackingByPlayerCount = limitGamemodeTrackingByPlayerCount;
+		save();
+	}
+
+	public int gamemodeTrackingMaxPlayers() {
+		return gamemodeTrackingMaxPlayers;
+	}
+
+	public void setGamemodeTrackingMaxPlayers(int gamemodeTrackingMaxPlayers) {
+		int sanitized = sanitizeMaxPlayers(gamemodeTrackingMaxPlayers);
+		if (this.gamemodeTrackingMaxPlayers == sanitized) {
+			return;
+		}
+		this.gamemodeTrackingMaxPlayers = sanitized;
+		save();
+	}
+
+	public JoinGamemodeNotifyMode joinGamemodeNotifyMode() {
+		return joinGamemodeNotifyMode;
+	}
+
+	public void setJoinGamemodeNotifyMode(JoinGamemodeNotifyMode joinGamemodeNotifyMode) {
+		if (this.joinGamemodeNotifyMode == joinGamemodeNotifyMode) {
+			return;
+		}
+		this.joinGamemodeNotifyMode = joinGamemodeNotifyMode;
+		save();
 	}
 
 	public enum MessageColor {
@@ -268,6 +335,43 @@ public final class JoinMessagesConfig {
 		}
 	}
 
+	public enum JoinGamemodeNotifyMode {
+		OFF("Off"),
+		CREATIVE("Creative"),
+		SURVIVAL("Survival"),
+		ADVENTURE("Adventure"),
+		SPECTATOR("Spectator"),
+		ALL("All");
+
+		private final String label;
+
+		JoinGamemodeNotifyMode(String label) {
+			this.label = label;
+		}
+
+		public String label() {
+			return label;
+		}
+
+		public JoinGamemodeNotifyMode next() {
+			JoinGamemodeNotifyMode[] values = values();
+			int nextIndex = (this.ordinal() + 1) % values.length;
+			return values[nextIndex];
+		}
+
+		public static JoinGamemodeNotifyMode fromName(String name) {
+			if (name == null || name.isBlank()) {
+				return ALL;
+			}
+			for (JoinGamemodeNotifyMode mode : values()) {
+				if (mode.name().equalsIgnoreCase(name)) {
+					return mode;
+				}
+			}
+			return ALL;
+		}
+	}
+
 	private static final class SerializedConfig {
 		boolean enabled = true;
 		boolean showPrefix = true;
@@ -276,5 +380,8 @@ public final class JoinMessagesConfig {
 		String autoWelcomeMessage = "Welcome {player}!";
 		String messageColor = MessageColor.YELLOW.name();
 		String gameModeMessagesMode = GameModeMessagesMode.OFF.name();
+		boolean limitGamemodeTrackingByPlayerCount = true;
+		int gamemodeTrackingMaxPlayers = 40;
+		String joinGamemodeNotifyMode = JoinGamemodeNotifyMode.ALL.name();
 	}
 }

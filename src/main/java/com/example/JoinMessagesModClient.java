@@ -1,7 +1,12 @@
 package com.example;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -111,6 +116,18 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+			dispatcher.register(
+				LiteralArgumentBuilder.<FabricClientCommandSource>literal("gamemodecheck")
+					.then(RequiredArgumentBuilder.<FabricClientCommandSource, String>argument("player", StringArgumentType.word())
+						.suggests((context, builder) -> {
+							knownPlayers.forEach(builder::suggest);
+							return builder.buildFuture();
+						})
+						.executes(context -> executeGamemodeCheck(context.getSource(), StringArgumentType.getString(context, "player")))
+					)
+			)
+		);
 	}
 
 	private void onClientTick(Minecraft client) {
@@ -139,7 +156,13 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			knownPlayers.clear();
 			knownPlayers.addAll(currentPlayers);
 			knownPlayerGameModes.clear();
-			knownPlayerGameModes.putAll(currentPlayerGameModes);
+			boolean gamemodeTrackingActive = shouldTrackGamemodes(currentPlayers.size());
+			if (gamemodeTrackingActive) {
+				knownPlayerGameModes.putAll(currentPlayerGameModes);
+			}
+			if (config.enabled() && gamemodeTrackingActive) {
+				notifyExistingPlayersGamemodesOnJoin(client, currentPlayers, currentPlayerGameModes);
+			}
 			seededForCurrentServer = true;
 			return;
 		}
@@ -150,15 +173,21 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		Set<String> leftPlayers = knownPlayers.stream()
 			.filter(name -> !containsIgnoreCase(currentPlayers, name))
 			.collect(Collectors.toSet());
+		boolean gamemodeTrackingActive = shouldTrackGamemodes(currentPlayers.size());
 
 		if (config.enabled()) {
 			for (String joined : joinedPlayers) {
 				handlePlayerEvent(client, joined, true);
+				if (gamemodeTrackingActive) {
+					maybeSendJoinGamemodeNotification(client, joined, currentPlayerGameModes.get(normalizePlayerName(joined)));
+				}
 			}
 			for (String left : leftPlayers) {
 				handlePlayerEvent(client, left, false);
 			}
-			handleGameModeChanges(client, currentPlayers, currentPlayerGameModes);
+			if (gamemodeTrackingActive) {
+				handleGameModeChanges(client, currentPlayers, currentPlayerGameModes);
+			}
 		} else {
 			pendingJoinMessages.clear();
 			pendingLeaveMessages.clear();
@@ -169,7 +198,9 @@ public class JoinMessagesModClient implements ClientModInitializer {
 		knownPlayers.clear();
 		knownPlayers.addAll(currentPlayers);
 		knownPlayerGameModes.clear();
-		knownPlayerGameModes.putAll(currentPlayerGameModes);
+		if (gamemodeTrackingActive) {
+			knownPlayerGameModes.putAll(currentPlayerGameModes);
+		}
 	}
 
 	private void sendModMessage(Minecraft client, String message) {
@@ -219,6 +250,29 @@ public class JoinMessagesModClient implements ClientModInitializer {
 				client,
 				playerName + " changed gamemode: " + formatGameTypeName(previousMode) + " -> " + formatGameTypeName(currentMode)
 			);
+		}
+	}
+
+	private void maybeSendJoinGamemodeNotification(Minecraft client, String playerName, GameType gameType) {
+		JoinMessagesConfig.JoinGamemodeNotifyMode mode = config.joinGamemodeNotifyMode();
+		if (mode == JoinMessagesConfig.JoinGamemodeNotifyMode.OFF || gameType == null) {
+			return;
+		}
+
+		if (mode != JoinMessagesConfig.JoinGamemodeNotifyMode.ALL && !matchesGamemodeFilter(mode, gameType)) {
+			return;
+		}
+
+		sendModMessage(client, playerName + " is in " + formatGameTypeName(gameType));
+	}
+
+	private void notifyExistingPlayersGamemodesOnJoin(Minecraft client, Set<String> currentPlayers, Map<String, GameType> currentPlayerGameModes) {
+		String localPlayerName = normalizePlayerName(client.player.getGameProfile().name());
+		for (String playerName : currentPlayers) {
+			if (normalizePlayerName(playerName).equals(localPlayerName)) {
+				continue;
+			}
+			maybeSendJoinGamemodeNotification(client, playerName, currentPlayerGameModes.get(normalizePlayerName(playerName)));
 		}
 	}
 
@@ -420,6 +474,39 @@ public class JoinMessagesModClient implements ClientModInitializer {
 			return "Unknown";
 		}
 		return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+	}
+
+	private boolean shouldTrackGamemodes(int onlinePlayers) {
+		if (!config.limitGamemodeTrackingByPlayerCount()) {
+			return true;
+		}
+		return onlinePlayers < config.gamemodeTrackingMaxPlayers();
+	}
+
+	private static boolean matchesGamemodeFilter(JoinMessagesConfig.JoinGamemodeNotifyMode mode, GameType gameType) {
+		return switch (mode) {
+			case CREATIVE -> gameType == GameType.CREATIVE;
+			case SURVIVAL -> gameType == GameType.SURVIVAL;
+			case ADVENTURE -> gameType == GameType.ADVENTURE;
+			case SPECTATOR -> gameType == GameType.SPECTATOR;
+			default -> false;
+		};
+	}
+
+	private int executeGamemodeCheck(FabricClientCommandSource source, String requestedPlayer) {
+		String normalized = normalizePlayerName(requestedPlayer);
+		String actualName = knownPlayers.stream()
+			.filter(name -> normalizePlayerName(name).equals(normalized))
+			.findFirst()
+			.orElse(requestedPlayer);
+		GameType mode = knownPlayerGameModes.get(normalized);
+		if (mode == null) {
+			source.sendFeedback(Component.literal(actualName + " gamemode is unknown (player missing, hidden, or tracking disabled for this server size)."));
+			return 0;
+		}
+
+		source.sendFeedback(Component.literal(actualName + " is in " + formatGameTypeName(mode) + "."));
+		return 1;
 	}
 
 	private record PendingEvent(String playerName, long detectedAtMillis) {
